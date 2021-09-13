@@ -7,10 +7,10 @@ depmod - Generate modules.dep and map files.
 # SYNOPSIS
 
 *depmod* [*-b* _basedir_] [*-m* _moduledir_] [*-o* _outdir_] [*-e*] [*-E* _Module.symvers_]
-\ \ \ \ \ \ \ \[*-F* _System.map_] [*-n*] [*-v*] [*-A*] [*-P* _prefix_] [*-w*] [_version_]
+\ \ \ \ \ \ \ \[*-F* _System.map_] [*-n*] [*-v*] [*-A*] [*-P* _prefix_] [*-w*] [*-I*] [_version_]
 
 *depmod* [*-e*] [*-E* _Module.symvers_] [*-F* _System.map_] [*-n*] [*-v*] [*-P* _prefix_]
-\ \ \ \ \ \ \ \[*-w*] [_version_] [_filename_...]
+\ \ \ \ \ \ \ \[*-w*] [*-I*] [_version_] [_filename_...]
 
 # DESCRIPTION
 
@@ -25,7 +25,7 @@ dependencies can get quite complex.
 needed. It determines what symbols each module exports and needs.  This list is
 written to *modules.dep*, and a binary hashed version named modules.dep.bin, in
 the same directory. If filenames are given on the command line, only those
-modules are examined (which is rarely useful unless all modules are listed).
+modules are examined (which is rarely useful unless incremental mode is used).
 *depmod* also creates a list of symbols provided by modules in the file named
 modules.symbols and its binary hashed version, modules.symbols.bin. Finally,
 *depmod* will output a file named modules.devname if modules supply special
@@ -115,6 +115,13 @@ rather than the current kernel version (as returned by *uname -r*).
 
 *-h*, *--help*
 	Print the help message and exit.
+
+*-I*, *--incremental*
+	Run in incremental mode. This mode preserves previous module dependencies
+	and adds the dependencies of the modules given on the command line. If no
+	modules are given or *--all* is set, the module directory is scanned for
+	added or deleted modules, and the *modules.dep* file and other outputs
+	are updated accordingly.
 
 *-n*, *--show*, *--dry-run*
 	This sends the resulting *modules.dep* and the various map files to
