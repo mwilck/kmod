@@ -2370,6 +2370,7 @@ static int output_symbols_bin(struct depmod *depmod, FILE *out)
 		const struct symbol *sym = v;
 		size_t len;
 		char *s;
+		char crcbuf[17];
 
 		if (sym->owner == NULL)
 			continue;
@@ -2386,6 +2387,9 @@ static int output_symbols_bin(struct depmod *depmod, FILE *out)
 
 		if (duplicate && depmod->cfg->warn_dups)
 			WRN("duplicate module syms:\n%s %s\n", s, sym->owner->modname);
+
+		len = snprintf(crcbuf, sizeof(crcbuf), "%08" PRIx64, sym->crc);
+		index_insert(idx, s, crcbuf, UINT_MAX);
 	}
 
 	index_write(idx, out);
