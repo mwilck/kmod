@@ -360,20 +360,18 @@ static struct index_node_f *index_readchild(const struct index_node_f *parent, i
 	return NULL;
 }
 
-static void index_dump_node(struct index_node_f *node, struct strbuf *buf, int fd)
+static void index_walk_node(struct index_node_f *node, struct strbuf *buf,
+			    index_walk_cb *callback, void *arg)
 {
 	struct index_value *v;
-	size_t pushed;
-	int ch;
+	int ch, pushed;
+	const char *key;
 
 	pushed = strbuf_pushchars(buf, node->prefix);
+	key = strbuf_str(buf);
 
-	for (v = node->values; v != NULL; v = v->next) {
-		write_str_safe(fd, buf->bytes, buf->used);
-		write_str_safe(fd, " ", 1);
-		write_str_safe(fd, v->value, strlen(v->value));
-		write_str_safe(fd, "\n", 1);
-	}
+	for (v = node->values; v != NULL; v = v->next)
+		callback(key, v->value, v->len, v->priority, arg);
 
 	for (ch = node->first; ch <= node->last; ch++) {
 		struct index_node_f *child = index_readchild(node, ch);
@@ -382,7 +380,7 @@ static void index_dump_node(struct index_node_f *node, struct strbuf *buf, int f
 			continue;
 
 		if (strbuf_pushchar(buf, ch)) {
-			index_dump_node(child, buf, fd);
+			index_walk_node(child, buf, callback, arg);
 			strbuf_popchar(buf);
 		}
 	}
@@ -391,7 +389,8 @@ static void index_dump_node(struct index_node_f *node, struct strbuf *buf, int f
 	index_close(node);
 }
 
-void index_dump(struct index_file *in, int fd, bool alias_prefix)
+void index_walk(struct index_file *in, bool alias_prefix, index_walk_cb *callback,
+		void *arg)
 {
 	struct index_node_f *root;
 	struct strbuf buf;
@@ -402,8 +401,24 @@ void index_dump(struct index_file *in, int fd, bool alias_prefix)
 
 	strbuf_init(&buf);
 	if (!alias_prefix || strbuf_pushchars(&buf, "alias "))
-		index_dump_node(root, &buf, fd);
+		index_walk_node(root, &buf, callback, arg);
 	strbuf_release(&buf);
+}
+
+static void index_dump_cb(const char *key, const char *str, unsigned int len,
+			  unsigned int priority, void *arg)
+{
+	long fd = (long)arg;
+
+	write_str_safe(fd, key, strlen(key));
+	write_str_safe(fd, " ", 1);
+	write_str_safe(fd, str, len);
+	write_str_safe(fd, "\n", 1);
+}
+
+void index_dump(struct index_file *in, int fd, bool alias_prefix)
+{
+	index_walk(in, alias_prefix, index_dump_cb, (void *)(long)fd);
 }
 
 static char *index_search__node(struct index_node_f *node, const char *key, int i)
@@ -821,22 +836,22 @@ static struct index_mm_node *index_mm_readchild(const struct index_mm_node *pare
 	return NULL;
 }
 
-static void index_mm_dump_node(struct index_mm_node *node, struct strbuf *buf, int fd)
+static void index_mm_walk_node(const struct index_mm_node *node, struct strbuf *buf,
+			       index_walk_cb *callback, void *arg)
 {
 	const void *p;
 	size_t i, pushed;
 	int ch;
+	const char *key;
 
 	pushed = strbuf_pushchars(buf, node->prefix);
+	key = strbuf_str(buf);
 
 	for (i = 0, p = node->values; i < node->value_count; i++) {
 		struct index_mm_value v;
 
 		read_value_mm(&p, &v);
-		write_str_safe(fd, buf->bytes, buf->used);
-		write_str_safe(fd, " ", 1);
-		write_str_safe(fd, v.value, v.len);
-		write_str_safe(fd, "\n", 1);
+		callback(key, v.value, v.len, v.priority, arg);
 	}
 
 	for (ch = node->first; ch <= node->last; ch++) {
@@ -847,7 +862,7 @@ static void index_mm_dump_node(struct index_mm_node *node, struct strbuf *buf, i
 			continue;
 
 		if (strbuf_pushchar(buf, ch)) {
-			index_mm_dump_node(child, buf, fd);
+			index_mm_walk_node(child, buf, callback, arg);
 			strbuf_popchar(buf);
 		}
 	}
@@ -855,7 +870,8 @@ static void index_mm_dump_node(struct index_mm_node *node, struct strbuf *buf, i
 	strbuf_popchars(buf, pushed);
 }
 
-void index_mm_dump(const struct index_mm *idx, int fd, bool alias_prefix)
+void index_mm_walk(const struct index_mm *idx, bool alias_prefix, index_walk_cb *callback,
+		   void *arg)
 {
 	struct index_mm_node nbuf, *root;
 	struct strbuf buf;
@@ -866,8 +882,13 @@ void index_mm_dump(const struct index_mm *idx, int fd, bool alias_prefix)
 
 	strbuf_init(&buf);
 	if (!alias_prefix || strbuf_pushchars(&buf, "alias "))
-		index_mm_dump_node(root, &buf, fd);
+		index_mm_walk_node(root, &buf, callback, arg);
 	strbuf_release(&buf);
+}
+
+void index_mm_dump(const struct index_mm *idx, int fd, bool alias_prefix)
+{
+	index_mm_walk(idx, alias_prefix, index_dump_cb, (void *)(long)fd);
 }
 
 static char *index_mm_search_node(struct index_mm_node *node, const char *key)
