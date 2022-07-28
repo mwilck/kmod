@@ -53,7 +53,7 @@ static const char *const default_cfg_paths[] = {
 	// clang-format on
 };
 
-static const char cmdopts_s[] = "aAIb:m:o:C:E:F:evnP:wVh";
+static const char cmdopts_s[] = "aAIb:m:o:C:E:F:evnP:wxVh";
 static const struct option cmdopts[] = {
 	{ "all", no_argument, 0, 'a' },
 	{ "quick", no_argument, 0, 'A' },
@@ -70,6 +70,7 @@ static const struct option cmdopts[] = {
 	{ "dry-run", no_argument, 0, 'n' },
 	{ "symbol-prefix", required_argument, 0, 'P' },
 	{ "warn", no_argument, 0, 'w' },
+	{ "errexit", no_argument, 0, 'x' },
 	{ "version", no_argument, 0, 'V' },
 	{ "help", no_argument, 0, 'h' },
 	{},
@@ -974,6 +975,8 @@ struct depmod {
 	struct hash *modules_by_name;
 	struct hash *symbols;
 	struct hash *broken;
+	bool undefined_symbols;
+	bool bad_crc;
 };
 
 static void mod_free(struct mod *mod)
@@ -1810,6 +1813,7 @@ static int depmod_load_module_dependencies(struct depmod *depmod, struct mod *mo
 		if (sym == NULL) {
 			DBG("%s needs (%c) unknown symbol %s\n", mod->path, bindtype,
 			    name);
+			depmod->undefined_symbols = true;
 			if (cfg->print_unknown && !is_weak)
 				WRN("%s needs unknown symbol %s\n", mod->path, name);
 			continue;
@@ -1818,6 +1822,7 @@ static int depmod_load_module_dependencies(struct depmod *depmod, struct mod *mo
 		if (cfg->check_symvers && sym->crc != crc && !is_weak) {
 			DBG("symbol %s (%#" PRIx64 ") module %s (%#" PRIx64 ")\n",
 			    sym->name, sym->crc, mod->path, crc);
+			depmod->bad_crc = true;
 			if (cfg->print_unknown)
 				WRN("%s disagrees about version of symbol %s\n",
 				    mod->path, name);
@@ -3686,6 +3691,8 @@ static int do_depmod(int argc, char *argv[])
 	struct kmod_ctx *ctx = NULL;
 	struct cfg cfg;
 	struct depmod depmod;
+	bool errexit = false;
+	bool success;
 
 	memset(&cfg, 0, sizeof(cfg));
 	memset(&depmod, 0, sizeof(depmod));
@@ -3763,6 +3770,9 @@ static int do_depmod(int argc, char *argv[])
 			break;
 		case 'w':
 			cfg.warn_dups = 1;
+			break;
+		case 'x':
+			errexit = 1;
 			break;
 		case 'h':
 			help();
@@ -3920,9 +3930,10 @@ output:
 	err = depmod_output(&depmod, out);
 
 done:
+	success = err >= 0 && !(errexit && (depmod.undefined_symbols || depmod.bad_crc));
 	depmod_shutdown(&depmod);
 	cfg_free(&cfg);
-	return err >= 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+	return success ? EXIT_SUCCESS : EXIT_FAILURE;
 
 cmdline_modules_failed:
 	depmod_shutdown(&depmod);
