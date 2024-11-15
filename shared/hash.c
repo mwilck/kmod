@@ -249,6 +249,8 @@ int hash_del(struct hash *hash, const char *key)
 		.value = NULL,
 	};
 
+	if (bucket->entries == NULL)
+		return -ENOENT;
 	entry = bsearch(&se, bucket->entries, bucket->used, sizeof(struct hash_entry),
 			hash_entry_cmp);
 	if (entry == NULL)
