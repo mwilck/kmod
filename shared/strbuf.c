@@ -85,6 +85,8 @@ size_t strbuf_pushchars(struct strbuf *buf, const char *str)
 	assert(buf != NULL);
 
 	len = strlen(str);
+	if (len == 0)
+		return 0;
 
 	if (!buf_grow(buf, buf->used + len))
 		return 0;
